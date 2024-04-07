@@ -343,9 +343,9 @@ def inference_with_detector(
                 image, idx_to_class, gt_boxes, pred_boxes
             )
             all_images.append(torch.from_numpy(image))
-    
+
     if output_dir is None:
-        writer=SummaryWriter("detection_logs")
+        writer = SummaryWriter("detection_logs")
         image_grid = make_grid(all_images, nrow=8)
         writer.add_image("test_images", image_grid)
         writer.close()

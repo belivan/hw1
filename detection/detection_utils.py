@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from torchvision.ops import nms as nms_torch
 
 # Short hand type notation:
-TensorDict = Dict[str, torch.Tensor]
+TensorDict = Dict[str, torch.Tensor]  # A dictionary with string keys and tensor values.
 
 @torch.no_grad()
 def fcos_match_locations_to_gt(
@@ -50,6 +50,11 @@ def fcos_match_locations_to_gt(
             `(-1, -1, -1, -1, -1)`. Background indicates that the center does
             not belong to any object.
     """
+    # print("Shwoing devices")
+    # print(locations_per_fpn_level['p3'].device)
+    # print(gt_boxes.device)
+
+    gt_device = gt_boxes.device
 
     matched_gt_boxes = {
         level_name: None for level_name in locations_per_fpn_level.keys()
@@ -58,12 +63,18 @@ def fcos_match_locations_to_gt(
     # Do this matching individually per FPN level.
     for level_name, centers in locations_per_fpn_level.items():
 
+        if centers.device != gt_device:
+            centers = centers.to(gt_device)
+
         # Get stride for this FPN level.
         stride = strides_per_fpn_level[level_name]
 
         x, y = centers.unsqueeze(dim=2).unbind(dim=1)
         x0, y0, x1, y1 = gt_boxes[:, :4].unsqueeze(dim=0).unbind(dim=2)
         pairwise_dist = torch.stack([x - x0, y - y0, x1 - x, y1 - y], dim=2)
+
+        if pairwise_dist.device != gt_device:
+            pairwise_dist = pairwise_dist.to(gt_device)
 
         # Pairwise distance between every feature center and GT box edges:
         # shape: (num_gt_boxes, num_centers_this_level, 4)
@@ -139,12 +150,31 @@ def fcos_get_deltas_from_locations(
     ##########################################################################
     # Set this to Tensor of shape (N, 4) giving deltas (left, top, right, bottom)
     # from the locations to GT box edges, normalized by FPN stride.
-    deltas = None
-    pass
+    
+    # print(locations.type())
+    # print(gt_boxes.type())
+    # print(stride.type())
+    
+    if locations.device != gt_boxes.device:
+        gt_boxes = gt_boxes.to(locations.device)
+        
+    deltas = torch.full((len(locations), 4), -1.)
+    #
+    # Identify foreground boxes (non-background)
+    foreground_mask = gt_boxes[:, 0] != -1
+
+    # Compute deltas only for foreground boxes
+    if foreground_mask.any():
+        deltas[foreground_mask] = torch.stack([
+            locations[foreground_mask, 0] - gt_boxes[foreground_mask, 0],  # left
+            locations[foreground_mask, 1] - gt_boxes[foreground_mask, 1],  # top
+            gt_boxes[foreground_mask, 2] - locations[foreground_mask, 0],  # right
+            gt_boxes[foreground_mask, 3] - locations[foreground_mask, 1]   # bottom
+        ], dim=-1) / stride
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
-
+    # print("Inside loop", deltas)
     return deltas
 
 
@@ -181,8 +211,23 @@ def fcos_apply_deltas_to_locations(
     # for our use-case because the feature center must lie INSIDE the final  #
     # box. Make sure to clip them to zero.                                   #
     ##########################################################################
-    output_boxes = None
+    output_boxes = torch.zeros_like(deltas)
 
+    # Check for background boxes
+    background_mask = (deltas == -1).all(dim=1)
+
+    # Un-normalize the deltas for non-background boxes
+    deltas[~background_mask] *= stride
+
+    # Apply deltas to locations for non-background boxes
+    output_boxes[~background_mask, 0] = locations[~background_mask, 0] - deltas[~background_mask, 0]  # left
+    output_boxes[~background_mask, 1] = locations[~background_mask, 1] - deltas[~background_mask, 1]  # top
+    output_boxes[~background_mask, 2] = locations[~background_mask, 0] + deltas[~background_mask, 2]  # right
+    output_boxes[~background_mask, 3] = locations[~background_mask, 1] + deltas[~background_mask, 3]  # bottom
+
+    # For background boxes, set output boxes to original locations
+    output_boxes[background_mask] = torch.stack([locations[background_mask, 0], locations[background_mask, 1],
+                                                 locations[background_mask, 0], locations[background_mask, 1]], dim=1)
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -196,6 +241,9 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
     centerness regression predictor. See `fcos_get_deltas_from_locations` on
     how deltas are computed. If GT boxes are "background" => deltas are
     `(-1, -1, -1, -1)`, then centerness should be `-1`.
+
+    Center-ness is a measure of how close the center of a location is to the
+    center of the GT box.
 
     For reference, centerness equation is available in FCOS paper
     https://arxiv.org/abs/1904.01355 (Equation 3).
@@ -215,7 +263,19 @@ def fcos_make_centerness_targets(deltas: torch.Tensor):
     #   (max(left, right) * max(top, bottom))
     # )
     ##########################################################################
-    centerness = None
+    # print(deltas.shape)
+    background_mask = (deltas == -1).all(dim=1)
+    foreground_mask = ~background_mask
+
+    centerness = torch.full((len(deltas),), -1., dtype=deltas.dtype, device=deltas.device)
+
+    if foreground_mask.any():
+        left, top, right, bottom = deltas[:, 0], deltas[:, 1], deltas[:, 2], deltas[:, 3]
+        min_lr = torch.min(left[foreground_mask], right[foreground_mask])
+        min_tb = torch.min(top[foreground_mask], bottom[foreground_mask])
+        max_lr = torch.max(left[foreground_mask], right[foreground_mask])
+        max_tb = torch.max(top[foreground_mask], bottom[foreground_mask])
+        centerness[foreground_mask] = torch.sqrt((min_lr * min_tb) / (max_lr * max_tb))
     ##########################################################################
     #                             END OF YOUR CODE                           #
     ##########################################################################
@@ -255,10 +315,20 @@ def get_fpn_location_coords(
 
     for level_name, feat_shape in shape_per_fpn_level.items():
         level_stride = strides_per_fpn_level[level_name]
-        ##################################################################–####
+        ######################################################################
         # TODO: Implement logic to get location co-ordinates below.          #
         ######################################################################
-        pass
+        # Get the shape of feature map and calculate the center of each location.
+        # Then, project these centers to the input image co-ordinates.
+        # Store the result in `location_coords[level_name]`.
+        # x = (torch.arange(feat_shape[3], dtype=dtype, device=device) + 0.5) * level_stride
+        # y = (torch.arange(feat_shape[2], dtype=dtype, device=device) + 0.5) * level_stride
+
+        x = (torch.arange(feat_shape[3], dtype=dtype) + 0.5) * level_stride
+        y = (torch.arange(feat_shape[2], dtype=dtype) + 0.5) * level_stride
+        location_coords[level_name] = torch.stack(
+            torch.meshgrid(x, y), dim=2
+        ).reshape(-1, 2)  # (H * W, 2)
         ######################################################################
         #                             END OF YOUR CODE                       #
         ######################################################################

@@ -59,7 +59,7 @@ class HyperParameters:
 def create_dataset_and_dataloaders(subset=False):
     train_dataset = VOC2007DetectionTiny(
         DATASET_PATH, "train", image_size=IMAGE_SHAPE[0],
-        download=True# True (set to False after the first time)
+        download=True  # True (set to False after the first time)
     )
     if subset:
         small_dataset = torch.utils.data.Subset(
@@ -125,13 +125,16 @@ def visualize_gt(train_dataset, val_dataset):
     writer.close()
 
 def main(args):
+    args.inference = True
+    args.test_inference = False
+    args.overfit = False
+
     print("Loading data...")
-    
+
     if args.overfit:
         print("Loading a small subset for overfitting.")
     train_loader, val_loader, train_dataset, val_dataset = create_dataset_and_dataloaders(args.overfit)
-    
-    
+
     if args.overfit:
         hyperparams = HyperParameters(
             max_iters=250,
@@ -144,6 +147,7 @@ def main(args):
             max_iters=9000,
             log_period=100,
         )
+
     detector = FCOS(
         num_classes=NUM_CLASSES,
         fpn_channels=64,
@@ -154,14 +158,15 @@ def main(args):
         print("Visualizing GT...")
         visualize_gt(train_dataset, val_dataset)        
         return
-    
-    print("Training model...")
-    if not args.visualize_gt:
+
+    if not args.visualize_gt and not args.inference:
+        print("Training model...")
         train_model(detector, train_loader, hyperparams, overfit=args.overfit)
-    # print("Training complete! Saving loss curve to loss.png...")
-    print("Training complete!")
-    if not args.inference:
+        print("Training complete!")
         return
+    # print("Training complete! Saving loss curve to loss.png...")
+    # if not args.inference:
+    #     return
     print("Running inference...")
     if args.test_inference:
         small_dataset = torch.utils.data.Subset(
@@ -192,7 +197,9 @@ def main(args):
         )
     else:
         print("Running inference and computing mAP...")
-        assert os.path.exists("mAP")
+        # assert os.path.exists("mAP")
+        if not os.path.exists("mAP/input"):
+            os.makedirs("mAP/input")
         # Modify this depending on where you save your weights.
         weights_path = os.path.join(".", "fcos_detector.pt")
         detector.to(device=DEVICE)
@@ -207,9 +214,8 @@ def main(args):
             dtype=torch.float32,
             output_dir="mAP/input",
         )
-        os.system("cd mAP && python main.py")
+        os.system("cd mAP && python main.py")  # Run mAP computation using the provided scrip
         print("Output file written to ./mAP/output/mAP.png")
-        
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

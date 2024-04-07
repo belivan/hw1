@@ -28,7 +28,7 @@ class ARGS(object):
     # input batch size for training 
     batch_size = 64
     # input batch size for testing
-    test_batch_size=1000
+    test_batch_size = 1000
     # number of epochs to train for
     epochs = 14
     # learning rate
@@ -41,11 +41,11 @@ class ARGS(object):
     # how many batches to wait before evaluating model
     val_every = 100
     # set flag to True if you wish to save the model after training
-    save_at_end = False
+    save_at_end = True
     # set this to value >0 if you wish to save every x epochs
-    save_freq=-1
+    save_freq = 4
     # set true if using GPU during training
-    use_cuda = False
+    use_cuda = True
     # input size
     inp_size = 224
 

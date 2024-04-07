@@ -25,10 +25,12 @@ every prediction from the model.
 x, y locations for all the FPN features for each level.
 Confirm your implementation for (3) is correct by running the test suite. We have also implemented 
 the matching of locations to GT boxes for you. To visualize these boxes in Tensorboard, run `python3 train.py --visualize_gt`
+<!-- Was not successfuyl at visualizing... Nope it worked!--> 
 
 4. Next, implement `fcos_get_deltas_from_locations` and `fcos_apply_deltas_to_locations`
 in `detection_utils.py`, to compute the box regression deltas. Use the test suite to verify
 your implementation.
+<!-- Run this test again -->
 
 5. Implement the function `fcos_make_centerness_targets` in `detection_utils.py`. 
 By this point, all the tests in the suite should be passing. You need the 

@@ -105,12 +105,13 @@ class TestDetectorBackboneWithFPN(unittest.TestCase):
         # Another check: deltas for GT class label = -1 should be -1.
         background_box = torch.Tensor([[-1, -1, -1, -1, -1]])
         input_location = torch.Tensor([[100, 200]])
-        _deltas = fcos_get_deltas_from_locations(input_location, background_box, stride=8)
-        if _deltas is None:
+        deltas = fcos_get_deltas_from_locations(input_location, background_box, stride=8)
+        if deltas is None:
             self.skipTest("FCOS get deltas_from test is not implemented.")
-        output_box = fcos_apply_deltas_to_locations(_deltas, input_location, stride=8)
-        
-        self.assertTrue(torch.equal(_deltas, torch.tensor([[-1., -1., -1., -1.]])))
+        output_box = fcos_apply_deltas_to_locations(deltas, input_location, stride=8)
+        # print(_deltas)
+        # print(output_box)
+        self.assertTrue(torch.equal(deltas, torch.tensor([[-1., -1., -1., -1.]])))
         self.assertTrue(torch.equal(output_box, torch.tensor([[100., 200., 100., 200.]])))
 
     def test_make_centerness_targets(self):

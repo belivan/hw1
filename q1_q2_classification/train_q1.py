@@ -6,10 +6,13 @@ from voc_dataset import VOCDataset
 import numpy as np
 import random
 
+import warnings
+warnings.filterwarnings("ignore")
+
 if __name__ == "__main__":
-    np.random.seed(0)
-    torch.manual_seed(0)
-    random.seed(0)
+    np.random.seed(0)  # set the random seed
+    torch.manual_seed(0)  # set the random seed
+    random.seed(0)  # set the random seed
 
     ##################################################################
     # TODO: Create hyperparameter argument class
@@ -18,16 +21,16 @@ if __name__ == "__main__":
     # You should experiment and choose the correct hyperparameters
     # You should get a map of around 22 in 5 epochs
     ##################################################################
-    # args = ARGS(
-    #     epochs=10,
-    #     inp_size=64,
-    #     use_cuda=True,
-    #     val_every=70
-    #     lr=# TODO,
-    #     batch_size=#TODO,
-    #     step_size=#TODO,
-    #     gamma=#TODO
-    # )
+    args = ARGS(
+        epochs=10,
+        inp_size=64,
+        use_cuda=True,
+        val_every=70,
+        lr=0.001,  # learning rate
+        batch_size=64,
+        step_size=5,  # step size for the scheduler
+        gamma=0.5,  # gamma for the scheduler
+    )
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
